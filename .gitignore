@@ -1,0 +1,54 @@
+# ================================
+# Environment / Secrets
+# ================================
+.env
+.env.*
+!.env.example
+
+# ================================
+# Node / React / Vite
+# ================================
+node_modules/
+dist/
+.vite/
+
+# ================================
+# Java / Maven / Spring Boot
+# ================================
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Maven wrapper generated files
+.mvn/wrapper/maven-wrapper.jar
+
+# ================================
+# IDEs / Editors
+# ================================
+.idea/
+*.iml
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ================================
+# Logs
+# ================================
+*.log
+logs/
+
+# ================================
+# OS generated files
+# ================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ================================
+# Temporary files
+# ================================
+*.tmp
+*.temp
