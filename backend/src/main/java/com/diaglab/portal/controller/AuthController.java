@@ -1,24 +1,32 @@
+
 package com.diaglab.portal.controller;
 
-import com.diaglab.portal.entity.User;
-import com.diaglab.portal.repository.UserRepository;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.diaglab.portal.entity.User;
+import com.diaglab.portal.repository.UserRepository;
+import com.diaglab.portal.service.ActivityService;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -31,15 +39,18 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository contextRepository;
     private final UserRepository userRepository;
+    private final ActivityService activityService;
 
     public AuthController(
             AuthenticationManager authenticationManager,
             SecurityContextRepository contextRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            ActivityService activityService
     ) {
         this.authenticationManager = authenticationManager;
         this.contextRepository = contextRepository;
         this.userRepository = userRepository;
+        this.activityService = activityService;
     }
 
     public record LoginRequest(
@@ -72,6 +83,7 @@ public class AuthController {
 
             SecurityContext context =
                     SecurityContextHolder.createEmptyContext();
+
             context.setAuthentication(authentication);
             SecurityContextHolder.setContext(context);
 
@@ -88,6 +100,12 @@ public class AuthController {
 
             String role = user.getRole().name();
 
+            activityService.record(
+                    "USER_LOGIN",
+                    user.getUsername(),
+                    "Successful login"
+            );
+
             return ResponseEntity.ok(
                     new LoginResponse(
                             "Login successful",
@@ -99,7 +117,8 @@ public class AuthController {
         } catch (AuthenticationException e) {
             SecurityContextHolder.clearContext();
 
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
                     .body("Invalid username or password");
         }
     }
@@ -112,7 +131,9 @@ public class AuthController {
         if (authentication == null
                 || !authentication.isAuthenticated()
                 || authentication.getName().equals("anonymousUser")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .build();
         }
 
         return userRepository
@@ -127,7 +148,9 @@ public class AuthController {
                         )
                 )
                 .orElseGet(() ->
-                        ResponseEntity.status(HttpStatus.UNAUTHORIZED).build()
+                        ResponseEntity
+                                .status(HttpStatus.UNAUTHORIZED)
+                                .build()
                 );
     }
 
@@ -136,9 +159,31 @@ public class AuthController {
             HttpServletRequest request,
             HttpServletResponse response
     ) {
+        // Capture the username before clearing the security context.
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        String username = null;
+
+        if (authentication != null
+                && authentication.isAuthenticated()
+                && !authentication.getName().equals("anonymousUser")) {
+            username = authentication.getName();
+        }
+
+        // Record the logout before invalidating the session.
+        if (username != null) {
+            activityService.record(
+                    "USER_LOGOUT",
+                    username,
+                    "Successful logout"
+            );
+        }
+
         SecurityContextHolder.clearContext();
 
         HttpSession session = request.getSession(false);
+
         if (session != null) {
             session.invalidate();
         }
