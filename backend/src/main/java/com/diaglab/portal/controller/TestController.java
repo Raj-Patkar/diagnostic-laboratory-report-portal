@@ -1,9 +1,11 @@
+
 package com.diaglab.portal.controller;
 
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,29 +18,48 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.diaglab.portal.entity.LabTest;
 import com.diaglab.portal.entity.TestStatus;
+import com.diaglab.portal.service.ActivityService;
 import com.diaglab.portal.service.TestService;
 
 import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/tests")
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(
+    origins = "http://localhost:5173",
+    allowCredentials = "true"
+)
 public class TestController {
 
     private final TestService testService;
+    private final ActivityService activityService;
 
-    public TestController(TestService testService) {
+    public TestController(
+            TestService testService,
+            ActivityService activityService
+    ) {
         this.testService = testService;
+        this.activityService = activityService;
     }
 
     @PostMapping
     public ResponseEntity<?> createTest(
-            @Valid @RequestBody LabTest test
+            @Valid @RequestBody LabTest test,
+            Authentication authentication
     ) {
         try {
+            LabTest createdTest = testService.createTest(test);
+
+            activityService.record(
+                    "TEST_CREATED",
+                    authentication.getName(),
+                    "Test ID: " + createdTest.getId()
+                            + ", Test name: " + createdTest.getTestName()
+            );
+
             return ResponseEntity
                     .status(HttpStatus.CREATED)
-                    .body(testService.createTest(test));
+                    .body(createdTest);
 
         } catch (Exception e) {
             return ResponseEntity
@@ -85,12 +106,20 @@ public class TestController {
     @PutMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(
             @PathVariable Long id,
-            @RequestParam TestStatus status
+            @RequestParam TestStatus status,
+            Authentication authentication
     ) {
         try {
-            return ResponseEntity.ok(
-                    testService.updateStatus(id, status)
+            LabTest updatedTest = testService.updateStatus(id, status);
+
+            activityService.record(
+                    "TEST_STATUS_UPDATED",
+                    authentication.getName(),
+                    "Test ID: " + updatedTest.getId()
+                            + ", Status: " + updatedTest.getStatus()
             );
+
+            return ResponseEntity.ok(updatedTest);
 
         } catch (RuntimeException e) {
             return ResponseEntity
