@@ -1,6 +1,7 @@
 package com.diaglab.portal.config;
 
-import com.diaglab.portal.service.PortalUserDetailsService;
+import java.util.List;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -18,7 +19,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.List;
+import com.diaglab.portal.service.PortalUserDetailsService;
 
 @Configuration
 public class SecurityConfig {
@@ -113,7 +114,10 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "TECHNICIAN", "DOCTOR")
                     .requestMatchers("/api/activity/**")
                         .hasRole("ADMIN")
+                    
+                    .requestMatchers("/api/auth/login").permitAll()
 
+                    .requestMatchers("/api/users/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             );
 

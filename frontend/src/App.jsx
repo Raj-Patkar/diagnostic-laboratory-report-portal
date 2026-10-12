@@ -21,6 +21,7 @@ const nav = [
   ["tests", "Lab tests", "⚕"],
   ["reports", "Reports", "▤"],
   ["activity", "Activity log", "◷"],
+  ["users", "User management", "♙"],
 ];
 
 function Field({ label, children }) {
@@ -277,6 +278,7 @@ function App() {
   const [filter, setFilter] = useState("ALL");
   const [modal, setModal] = useState("");
   const [saving, setSaving] = useState(false);
+  const [staffUsers, setStaffUsers] = useState([]);
 
   const notify = message => { setToast(message); window.setTimeout(() => setToast(""), 3500); };
   const loadMe = useCallback(async () => {
@@ -304,7 +306,30 @@ function App() {
         setReports(await request(`/api/reports${filter !== "ALL" ? `?status=${filter}` : ""}`));
       } else if (page === "activity") {
         setActivities(await request("/api/activity"));
+      } else if (page === "users") {
+        setStaffUsers(await request("/api/users"));
       }
+      if (page === "users" && user.role !== "ADMIN") {
+        return (
+          <div className="shell">
+            <main className="content">
+              <section className="panel">
+                <h2>Access denied</h2>
+                <p className="muted">
+                  Only administrators can manage staff accounts.
+                </p>
+                <button
+                  className="btn primary"
+                  onClick={() => setPage("dashboard")}
+                >
+                  Return to dashboard
+                </button>
+              </section>
+            </main>
+          </div>
+        );
+      }
+
     } catch (e) { notify(e.message || "Could not load data."); }
     finally { setLoading(false); }
   }, [user, page, search, filter, refresh]);
@@ -351,6 +376,33 @@ function App() {
     } catch (e) { notify(e.message || "Could not save record."); }
     finally { setSaving(false); }
   }
+  async function saveUser(event) {
+    event.preventDefault();
+
+    const form = new FormData(event.currentTarget);
+    const values = Object.fromEntries(form.entries());
+
+    setSaving(true);
+
+    try {
+      await request("/api/users", {
+        method: "POST",
+        body: JSON.stringify({
+          username: values.username.trim(),
+          password: values.password,
+          role: values.role,
+        }),
+      });
+
+      setModal("");
+      setRefresh(value => value + 1);
+      notify("Staff account created successfully.");
+    } catch (e) {
+      notify(e.message || "Could not create staff account.");
+    } finally {
+      setSaving(false);
+    }
+  }
   async function updateTest(test, status) {
     try { await request(`/api/tests/${test.id}/status?status=${status}`, { method: "PUT" }); setRefresh(x => x + 1); notify("Test status updated."); }
     catch (e) { notify(e.message); }
@@ -379,7 +431,11 @@ function App() {
   }
   const active = nav.find(n => n[0] === page);
   const admin = user.role === "ADMIN";
-  const visibleNav = nav.filter(n => n[0] !== "activity" || admin);
+  const visibleNav = nav.filter(
+    n =>
+      (n[0] !== "activity" || admin) &&
+      (n[0] !== "users" || admin)
+  );
   const stats = [
     ["Total patients", dashboard.totalPatients ?? dashboard.patientCount ?? 0, "♙", "blue"],
     ["Lab tests", dashboard.totalTests ?? dashboard.testCount ?? 0, "⚕", "purple"],
@@ -421,7 +477,16 @@ function App() {
     <div className="main-area">
       <header className="topbar"><button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Open menu">☰</button><div className="crumb"><span>DiagLab</span><i>/</i><b>{active?.[1]}</b></div><div className="top-status"><span /> Laboratory workspace <b className="top-avatar">{user.username[0]?.toUpperCase()}</b></div></header>
       <main className="content">
-        <div className="page-title"><div><span className="eyebrow">LABORATORY WORKSPACE</span><h1>{active?.[1]}</h1><p>{({ dashboard: "Monitor patients, laboratory tests, and diagnostic reports.", patients: "Maintain patient details and find records quickly.", tests: "Track requested tests and update their processing status.", reports: "Create reports for completed tests and manage finalization.", activity: "Review actions performed in the portal." })[page]}</p></div><button className="btn secondary refresh" onClick={() => setRefresh(x => x + 1)} disabled={loading}>↻ <span>Refresh</span></button></div>
+        <div className="page-title"><div><span className="eyebrow">LABORATORY WORKSPACE</span><h1>{active?.[1]}</h1>
+          <p>{({
+            dashboard: "Monitor patients, laboratory tests, and diagnostic reports.",
+            patients: "Maintain patient details and find records quickly.",
+            tests: "Track requested tests and update their processing status.",
+            reports: "Create reports for completed tests and manage finalization.",
+            activity: "Review actions performed in the portal.",
+            users: "Create and review accounts for authorized laboratory staff."
+          })[page]}</p>
+        </div><button className="btn secondary refresh" onClick={() => setRefresh(x => x + 1)} disabled={loading}>↻ <span>Refresh</span></button></div>
         {toast && <div className="toast" role="status">{toast}<button onClick={() => setToast("")}>×</button></div>}
 
         {page === "dashboard" && <div className="stack">
@@ -438,16 +503,140 @@ function App() {
         {page === "reports" && <section className="panel data-panel"><div className="toolbar"><div><b>Diagnostic reports</b><small className="block-muted">Drafts and finalized reports</small></div><div className="toolbar-right"><select value={filter} onChange={e => setFilter(e.target.value)}><option value="ALL">All reports</option><option>DRAFT</option><option>FINAL</option></select><button className="btn primary" onClick={async () => { try { setTests(await request("/api/tests")); } catch (e) { notify(e.message); } setModal("report"); }}>＋ New report</button></div></div><div className="table-scroll"><table><thead><tr><th>Report</th><th>Test ID</th><th>Result</th><th>Reference range</th><th>Status</th><th>Action</th></tr></thead><tbody>{reports.map(r => <tr key={r.id}><td><code>RPT-{String(r.id).padStart(4, "0")}</code><small>Report ID {r.id}</small></td><td>#{r.testId}</td><td className="result">{r.result || "—"}</td><td>{r.referenceRange || "—"}</td><td><Status status={r.status} /></td><td>{r.status === "DRAFT" ? <button className="table-action" onClick={() => finalizeReport(r)}>Finalize</button> : "—"}</td></tr>)}</tbody></table>{loading && <p className="loading">Loading reports…</p>}{!loading && !reports.length && <Empty title="No reports found" text="Create a report for a completed test." />}</div><div className="table-foot">{reports.length} report record(s)</div></section>}
 
         {page === "activity" && <section className="panel activity-panel"><div className="panel-heading"><div><h2>Audit trail</h2><p>Events recorded by the backend</p></div><span className="count">{activities.length} events</span></div><Activity items={activities} loading={loading} /></section>}
+
+        {page === "users" && admin && (
+          <section className="panel data-panel">
+            <div className="toolbar">
+              <div>
+                <b>Staff accounts</b>
+                <small className="block-muted">
+                  Only administrators can create staff accounts.
+                </small>
+              </div>
+
+              <button
+                className="btn primary"
+                onClick={() => setModal("user")}
+              >
+                + Register staff
+              </button>
+            </div>
+
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Created</th>
+                    <th>Access</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {staffUsers.map(staff => (
+                    <tr key={staff.id}>
+                      <td>
+                        <b>{staff.username}</b>
+                        <small>Account ID #{staff.id}</small>
+                      </td>
+                      <td>
+                        <Status status={staff.role} />
+                      </td>
+                      <td>{date(staff.createdAt)}</td>
+                      <td>
+                        <Status
+                          status={staff.enabled ? "ENABLED" : "DISABLED"}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {loading && (
+                <p className="loading">Loading staff accounts…</p>
+              )}
+
+              {!loading && !staffUsers.length && (
+                <Empty
+                  title="No staff accounts found"
+                  text="Register a doctor or technician to get started."
+                />
+              )}
+            </div>
+
+            <div className="table-foot">
+              {staffUsers.length} staff account(s) · Passwords are never displayed
+            </div>
+          </section>
+        )}
+
       </main>
       <footer className="footer"><span>DiagLab · Diagnostic Laboratory Report Portal</span><span>Academic MVP <i /> Light mode</span></footer>
     </div>
 
-    {modal && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setModal("")}><section className="modal"><div className="modal-title"><h2>Create {modal === "patient" ? "patient" : modal === "test" ? "lab test" : "report"}</h2><button onClick={() => setModal("")}>×</button></div><form onSubmit={saveRecord}>
-      {modal === "patient" && <><div className="form-grid"><Field label="Patient code"><input name="patientCode" placeholder="PAT-003" required /></Field><Field label="Full name"><input name="fullName" required /></Field><Field label="Date of birth"><input type="date" name="dateOfBirth" /></Field><Field label="Gender"><select name="gender" required defaultValue=""><option value="" disabled>Select gender</option><option>Female</option><option>Male</option><option>Other</option><option>Prefer not to say</option></select></Field><Field label="Phone"><input name="phone" /></Field><Field label="Email"><input name="email" type="email" /></Field></div><Field label="Address"><textarea name="address" rows="2" /></Field></>}
-      {modal === "test" && <><Field label="Patient"><select name="patientId" required defaultValue=""><option value="" disabled>Select patient</option>{patients.map(p => <option key={p.id} value={p.id}>{p.patientCode} — {p.fullName}</option>)}</select></Field><div className="form-grid"><Field label="Test name"><input name="testName" placeholder="Complete Blood Count" required /></Field><Field label="Test type"><input name="testType" placeholder="Hematology" required /></Field><Field label="Requested by"><input name="requestedBy" required /></Field><Field label="Technician"><input name="technician" /></Field></div><p className="form-note">New test requests start with Pending status.</p></>}
-      {modal === "report" && <><Field label="Completed test"><select name="testId" required defaultValue=""><option value="" disabled>Select completed test</option>{tests.filter(t => t.status === "COMPLETED").map(t => <option key={t.id} value={t.id}>#{t.id} — {t.testName}</option>)}</select></Field><Field label="Result"><textarea name="result" rows="3" required placeholder="Sample/demo result text" /></Field><Field label="Reference range"><input name="referenceRange" /></Field><Field label="Remarks"><textarea name="remarks" rows="2" /></Field><p className="form-note">Use demo data only; this academic MVP is not a clinical diagnostic system.</p></>}
-      <div className="modal-actions"><button type="button" className="btn secondary" onClick={() => setModal("")}>Cancel</button><button className="btn primary" disabled={saving}>{saving ? "Saving…" : "Save record"}</button></div>
-    </form></section></div>}
+    {modal && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setModal("")}><section className="modal"><div className="modal-title"><h2>
+      {modal === "user"
+        ? "Register staff account"
+        : `Create ${modal === "patient"
+          ? "patient"
+          : modal === "test"
+            ? "lab test"
+            : "report"
+        }`}
+    </h2><button onClick={() => setModal("")}>×</button></div><form onSubmit={modal === "user" ? saveUser : saveRecord}>
+        {modal === "user" && (
+          <>
+            <p className="form-note">
+              Create an account for an authorized staff member.
+              The password is securely hashed by the backend.
+            </p>
+
+            <Field label="Username">
+              <input
+                name="username"
+                autoComplete="off"
+                minLength="3"
+                maxLength="50"
+                pattern="[A-Za-z0-9._-]+"
+                title="Use 3–50 letters, numbers, dots, underscores, or hyphens."
+                required
+              />
+            </Field>
+
+            <Field label="Temporary password">
+              <input
+                type="password"
+                name="password"
+                autoComplete="new-password"
+                minLength="8"
+                maxLength="100"
+                required
+              />
+              <small className="field-hint">
+                Use at least 8 characters. Share credentials securely.
+              </small>
+            </Field>
+
+            <Field label="Staff role">
+              <select name="role" required defaultValue="TECHNICIAN">
+                <option value="TECHNICIAN">Lab Technician</option>
+                <option value="DOCTOR">Doctor</option>
+              </select>
+            </Field>
+          </>
+        )}
+        {modal === "patient" && <><div className="form-grid"><Field label="Patient code"><input name="patientCode" placeholder="PAT-003" required /></Field><Field label="Full name"><input name="fullName" required /></Field><Field label="Date of birth"><input type="date" name="dateOfBirth" /></Field><Field label="Gender"><select name="gender" required defaultValue=""><option value="" disabled>Select gender</option><option>Female</option><option>Male</option><option>Other</option><option>Prefer not to say</option></select></Field><Field label="Phone"><input name="phone" /></Field><Field label="Email"><input name="email" type="email" /></Field></div><Field label="Address"><textarea name="address" rows="2" /></Field></>}
+        {modal === "test" && <><Field label="Patient"><select name="patientId" required defaultValue=""><option value="" disabled>Select patient</option>{patients.map(p => <option key={p.id} value={p.id}>{p.patientCode} — {p.fullName}</option>)}</select></Field><div className="form-grid"><Field label="Test name"><input name="testName" placeholder="Complete Blood Count" required /></Field><Field label="Test type"><input name="testType" placeholder="Hematology" required /></Field><Field label="Requested by"><input name="requestedBy" required /></Field><Field label="Technician"><input name="technician" /></Field></div><p className="form-note">New test requests start with Pending status.</p></>}
+        {modal === "report" && <><Field label="Completed test"><select name="testId" required defaultValue=""><option value="" disabled>Select completed test</option>{tests.filter(t => t.status === "COMPLETED").map(t => <option key={t.id} value={t.id}>#{t.id} — {t.testName}</option>)}</select></Field><Field label="Result"><textarea name="result" rows="3" required placeholder="Sample/demo result text" /></Field><Field label="Reference range"><input name="referenceRange" /></Field><Field label="Remarks"><textarea name="remarks" rows="2" /></Field><p className="form-note">Use demo data only; this academic MVP is not a clinical diagnostic system.</p></>}
+        <div className="modal-actions"><button type="button" className="btn secondary" onClick={() => setModal("")}>Cancel</button><button className="btn primary" disabled={saving}>{saving
+          ? "Saving…"
+          : modal === "user"
+            ? "Create account"
+            : "Save record"}</button></div>
+      </form></section></div>}
+
   </div>;
 }
 
