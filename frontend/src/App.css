@@ -708,3 +708,13 @@ code { font-size: 11px; }
   .quick-actions small { font-size: 11px; }
   .footer { font-size: 10px; }
 }
+
+
+/* User management additions */
+.field-hint {
+  display: block;
+  margin-top: -2px;
+  color: #64748B;
+  font-size: 12px;
+  line-height: 1.5;
+}
