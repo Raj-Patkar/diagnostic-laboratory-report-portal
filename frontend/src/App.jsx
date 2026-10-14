@@ -403,10 +403,17 @@ function App() {
       setSaving(false);
     }
   }
+
   async function updateTest(test, status) {
-    try { await request(`/api/tests/${test.id}/status?status=${status}`, { method: "PUT" }); setRefresh(x => x + 1); notify("Test status updated."); }
-    catch (e) { notify(e.message); }
+    try {
+      await request(`/api/tests/${test.id}/status?status=${status}`, { method: "PUT" });
+      setRefresh(x => x + 1);
+      notify("Test status update completed.");
+    } catch (e) {
+      notify(e.message);
+    }
   }
+
   async function finalizeReport(report) {
     try { await request(`/api/reports/${report.id}`, { method: "PUT", body: JSON.stringify({ ...report, status: "FINAL" }) }); setRefresh(x => x + 1); notify("Report finalized."); }
     catch (e) { notify(e.message); }
