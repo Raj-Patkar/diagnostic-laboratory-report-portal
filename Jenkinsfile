@@ -18,6 +18,7 @@ pipeline {
     environment {
         FRONTEND_DIR = 'frontend'
         BACKEND_DIR = 'backend'
+        SELENIUM_DIR = 'selenium-tests'
         NGINX_URL = 'http://localhost'
     }
 
@@ -38,6 +39,36 @@ pipeline {
 
                 dir("${BACKEND_DIR}") {
                     bat 'mvnw.cmd -B clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Selenium Continuous Testing') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'portal-test-credentials',
+                        usernameVariable: 'PORTAL_USERNAME',
+                        passwordVariable: 'PORTAL_PASSWORD'
+                    )
+                ]) {
+                    dir("${SELENIUM_DIR}") {
+                        bat 'mvn -B clean test -Dheadless=true -DbaseUrl=http://localhost:5173'
+                    }
+                }
+            }
+            post {
+                always {
+                    junit(
+                        testResults: 'selenium-tests/target/surefire-reports/TEST-*.xml',
+                        allowEmptyResults: false
+                    )
+
+                    archiveArtifacts(
+                        artifacts: 'selenium-tests/target/screenshots/**',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
                 }
             }
         }
@@ -72,10 +103,10 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline completed: build, package, deployment and verification succeeded.'
+            echo 'Pipeline completed: build, Selenium tests, packaging, deployment and verification succeeded.'
         }
         failure {
-            echo 'Pipeline failed. Review the stage console output.'
+            echo 'Pipeline failed. Review the stage output and published test report.'
         }
     }
 }
