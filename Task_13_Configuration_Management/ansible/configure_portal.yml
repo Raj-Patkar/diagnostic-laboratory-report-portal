@@ -1,0 +1,110 @@
+---
+- name: Configure Diagnostic Laboratory Report Portal prerequisites
+  hosts: portal
+  become: true
+  gather_facts: true
+  vars:
+    portal_user: portal
+    portal_dirs:
+      - /opt/diagnostic-lab-portal
+      - /opt/diagnostic-lab-portal/backend
+      - /opt/diagnostic-lab-portal/frontend
+      - /opt/diagnostic-lab-portal/logs
+      - /opt/diagnostic-lab-portal/releases
+    required_packages:
+      - openjdk-21-jre-headless
+      - nginx
+      - curl
+      - ca-certificates
+      - unzip
+  tasks:
+    - name: Ensure target is Ubuntu or Debian
+      ansible.builtin.assert:
+        that: ["ansible_os_family == 'Debian'"]
+        fail_msg: "This playbook supports Ubuntu/Debian Linux targets."
+    - name: Install required OS packages
+      ansible.builtin.apt:
+        name: "{{ required_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Create deployment user
+      ansible.builtin.user:
+        name: "{{ portal_user }}"
+        comment: "Diagnostic Laboratory Report Portal deployment account"
+        system: true
+        create_home: true
+        shell: /usr/sbin/nologin
+        state: present
+    - name: Create application directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ portal_user }}"
+        group: "{{ portal_user }}"
+        mode: "0750"
+      loop: "{{ portal_dirs }}"
+    - name: Ensure NGINX document root exists
+      ansible.builtin.file:
+        path: /var/www/diagnostic-lab-portal
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0755"
+    - name: Deploy NGINX site configuration
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/diagnostic-lab-portal
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              server_name _;
+              root /var/www/diagnostic-lab-portal;
+              index index.html;
+              location / { try_files $uri $uri/ /index.html; }
+              location /api/ {
+                  proxy_pass http://127.0.0.1:8085;
+                  proxy_http_version 1.1;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+      notify: Validate and reload NGINX
+    - name: Enable NGINX site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/diagnostic-lab-portal
+        dest: /etc/nginx/sites-enabled/diagnostic-lab-portal
+        state: link
+      notify: Validate and reload NGINX
+    - name: Disable default NGINX site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Validate and reload NGINX
+    - name: Ensure NGINX service is enabled and running
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+    - name: Document application ports
+      ansible.builtin.debug:
+        msg:
+          - "NGINX frontend/reverse proxy: TCP 80"
+          - "Spring Boot backend: TCP 8085 (NGINX upstream)"
+          - "Jenkins: TCP 8080 if installed on this node; managed separately"
+          - "Vite development server: TCP 5173 for development only"
+          - "Neon PostgreSQL is remote; this playbook does not open a local database port."
+  handlers:
+    - name: Validate and reload NGINX
+      ansible.builtin.command: nginx -t
+      changed_when: false
+      notify: Reload NGINX
+    - name: Reload NGINX
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
