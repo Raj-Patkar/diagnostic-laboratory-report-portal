@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import "./App.css";
 
-const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8085";
+const API = import.meta.env.VITE_API_BASE_URL || "";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
