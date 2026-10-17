@@ -44,15 +44,18 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cors = new CorsConfiguration();
-        cors.setAllowedOrigins(List.of("http://localhost:5173"));
+        cors.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://127.0.0.1:5173"
+        ));
         cors.setAllowedMethods(
                 List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         );
         cors.setAllowedHeaders(List.of("Content-Type", "Accept"));
         cors.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source
+                = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cors);
         return source;
     }
@@ -65,61 +68,49 @@ public class SecurityConfig {
     ) throws Exception {
 
         http
-            .cors(Customizer.withDefaults())
-
-            // For this local academic MVP, CSRF is disabled to simplify
-            // REST API testing. Re-enable it before production deployment.
-            .csrf(csrf -> csrf.disable())
-
-            .securityContext(context -> context
-                    .securityContextRepository(contextRepository)
-            )
-
-            .sessionManagement(session -> session
-                    .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
-                    .sessionFixation(fixation -> fixation.changeSessionId())
-            )
-
-            .userDetailsService(userDetailsService)
-
-            .authorizeHttpRequests(auth -> auth
-                    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                    .requestMatchers("/api/health", "/error").permitAll()
-                    .requestMatchers("/api/auth/login").permitAll()
-
-                    .requestMatchers("/api/auth/logout").authenticated()
-
-                    .requestMatchers(HttpMethod.GET, "/api/patients/**")
+                .cors(Customizer.withDefaults())
+                // For this local academic MVP, CSRF is disabled to simplify
+                // REST API testing. Re-enable it before production deployment.
+                .csrf(csrf -> csrf.disable())
+                .securityContext(context -> context
+                        .securityContextRepository(contextRepository)
+                )
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                        .sessionFixation(fixation -> fixation.changeSessionId())
+                )
+                .userDetailsService(userDetailsService)
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/health", "/error").permitAll()
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/logout").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/patients/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN", "DOCTOR")
-                    .requestMatchers(HttpMethod.POST, "/api/patients/**")
+                        .requestMatchers(HttpMethod.POST, "/api/patients/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN")
-                    .requestMatchers(HttpMethod.PUT, "/api/patients/**")
+                        .requestMatchers(HttpMethod.PUT, "/api/patients/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN")
-
-                    .requestMatchers(HttpMethod.GET, "/api/tests/**")
+                        .requestMatchers(HttpMethod.GET, "/api/tests/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN", "DOCTOR")
-                    .requestMatchers(HttpMethod.POST, "/api/tests/**")
+                        .requestMatchers(HttpMethod.POST, "/api/tests/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN")
-                    .requestMatchers(HttpMethod.PUT, "/api/tests/**")
+                        .requestMatchers(HttpMethod.PUT, "/api/tests/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN")
-
-                    .requestMatchers(HttpMethod.GET, "/api/reports/**")
+                        .requestMatchers(HttpMethod.GET, "/api/reports/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN", "DOCTOR")
-                    .requestMatchers(HttpMethod.POST, "/api/reports/**")
+                        .requestMatchers(HttpMethod.POST, "/api/reports/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN")
-                    .requestMatchers(HttpMethod.PUT, "/api/reports/**")
+                        .requestMatchers(HttpMethod.PUT, "/api/reports/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN")
-
-                    .requestMatchers("/api/dashboard/**")
+                        .requestMatchers("/api/dashboard/**")
                         .hasAnyRole("ADMIN", "TECHNICIAN", "DOCTOR")
-                    .requestMatchers("/api/activity/**")
+                        .requestMatchers("/api/activity/**")
                         .hasRole("ADMIN")
-                    
-                    .requestMatchers("/api/auth/login").permitAll()
-
-                    .requestMatchers("/api/users/**").hasRole("ADMIN")
-                    .anyRequest().authenticated()
-            );
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/users/**").hasRole("ADMIN")
+                        .anyRequest().authenticated()
+                );
 
         return http.build();
     }
