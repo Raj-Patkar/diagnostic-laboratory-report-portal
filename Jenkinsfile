@@ -46,17 +46,34 @@ pipeline {
             }
         }
 
+        
         stage('Selenium Continuous Testing') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'portal-test-credentials',
-                        usernameVariable: 'PORTAL_USERNAME',
-                        passwordVariable: 'PORTAL_PASSWORD'
-                    )
-                ]) {
-                    dir("${SELENIUM_DIR}") {
-                        bat 'mvn -B clean test -Dheadless=true -DbaseUrl=http://localhost:5173'
+                script {
+                    dir("${FRONTEND_DIR}") {
+                        bat '''
+                            if not exist dist\\index.html (
+                                echo ERROR: Frontend build output is missing.
+                                exit /b 1
+                            )
+                            start "Portal Vite Test Server" /B cmd /c "npm run preview -- --host 127.0.0.1 --port 5173"
+                        '''
+                    }
+
+                    bat '''
+                        powershell -NoProfile -ExecutionPolicy Bypass -Command "$ready = $false; for ($i = 0; $i -lt 30; $i++) { try { $r = Invoke-WebRequest -Uri 'http://localhost:5173' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $ready = $true; break } } catch {}; Start-Sleep -Seconds 2 }; if (-not $ready) { Write-Error 'Frontend did not become ready on port 5173'; exit 1 }"
+                    '''
+
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'portal-test-credentials',
+                            usernameVariable: 'PORTAL_USERNAME',
+                            passwordVariable: 'PORTAL_PASSWORD'
+                        )
+                    ]) {
+                        dir("${SELENIUM_DIR}") {
+                            bat 'mvn -B clean test -Dheadless=true -DbaseUrl=http://localhost:5173'
+                        }
                     }
                 }
             }
@@ -74,6 +91,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Package Artifacts') {
             steps {
